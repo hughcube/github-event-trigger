@@ -1,0 +1,145 @@
+#!/usr/bin/env php
+<?php
+
+use Github\Api\Deployment;
+use Github\Client;
+
+if (!ini_get('date.timezone')) {
+    ini_set('date.timezone', 'PRC');
+}
+
+/**
+ * require autoload
+ */
+call_user_func(function () {
+    foreach (
+        [
+            __DIR__ . '/../../autoload.php',
+            __DIR__ . '/../vendor/autoload.php',
+            __DIR__ . '/vendor/autoload.php'
+        ] as $file
+    ) {
+        if (file_exists($file)) {
+            require_once $file;
+            break;
+        }
+    }
+});
+
+/**
+ * set command constant
+ */
+call_user_func(function () {
+    $argv = empty($_SERVER['argv']) ? null : $_SERVER['argv'];
+    define('COMMAND', (isset($argv[1]) ? $argv[1] : null));
+});
+
+/**
+ * set command $params
+ */
+$params = call_user_func(function () {
+    $argv = empty($_SERVER['argv']) ? [] : $_SERVER['argv'];
+
+    $params = [];
+    foreach ($argv as $item) {
+        if (false == preg_match('/^--([\w-]+)(?:=(.*))?$/', $item, $matches)) {
+            continue;
+        }
+
+        $params[$matches[1]] = isset($matches[2]) ? $matches[2] : null;
+    }
+
+    return $params;
+});
+
+
+call_user_func(function () use ($params) {
+    if (function_exists(COMMAND)) {
+        $authHttpToken = (!empty($params['auth_http_token']) ? $params['auth_http_token'] : null);
+
+        /** @var Client $client */
+        $client = new Client();
+        $client->authenticate($authHttpToken, null, Client::AUTH_HTTP_TOKEN);
+
+        return call_user_func(COMMAND, $client, $params);
+    }
+
+    fwrite(STDOUT, '未定义命令!!!' . PHP_EOL);
+    die(1);
+});
+
+/**
+ * 触发部署事件
+ * @see https://developer.github.com/v3/repos/deployments/
+ *
+ * @param Client $client
+ * @param $params
+ * @throws \Github\Exception\MissingArgumentException
+ */
+function deployment(Client $client, array $params)
+{
+    $repository = (!empty($params['repository']) ? $params['repository'] : null);
+    $ref = (!empty($params['ref']) ? $params['ref'] : 'master');
+
+    $repositoryArray = explode('/', $repository);
+    $username = isset($repositoryArray[0]) ? $repositoryArray[0] : null;
+    $repository = isset($repositoryArray[1]) ? $repositoryArray[1] : null;
+
+    /** @var Deployment $deployment */
+    $deployment = $client->api('deployment');
+
+    $result = null;
+    $result = $deployment->create($username, $repository, ['ref' => $ref, 'required_contexts' => []]);
+
+    if (isset($result['url'])) {
+        fwrite(STDOUT, sprintf('触发 %s/%s 部署成功: Url: %s' . PHP_EOL, $username, $repository, $result['url']));
+        die(0);
+    }
+
+    fwrite(STDERR, sprintf('触发 %s/%s 部署失败', $username, $repository));
+    die(1);
+}
+
+
+/**
+ * 完成部署
+ * @see https://developer.github.com/v3/repos/deployments/
+ *
+ * @param Client $client
+ * @param array $params
+ * @throws \Github\Exception\MissingArgumentException
+ */
+function completeDeployment(Client $client, array $params)
+{
+    $repository = (!empty($params['repository']) ? $params['repository'] : null);
+    $deployments = (!empty($params['deployments']) ? $params['deployments'] : null);
+    $state = (!empty($params['state']) ? $params['state'] : 'success');
+
+    $repositoryArray = explode('/', $repository);
+    $username = isset($repositoryArray[0]) ? $repositoryArray[0] : null;
+    $repository = isset($repositoryArray[1]) ? $repositoryArray[1] : null;
+
+    /** @var Deployment $deployment */
+    $deployment = $client->api('deployment');
+
+    $deployments = empty($deployments) ? [] : array_values(array_unique(array_filter(explode(',', $deployments))));
+    if (empty($deployments)) {
+        $result = $deployment->all($username, $repository);
+        foreach ($result as $item) {
+            $deployments[] = $item['id'];
+        }
+    }
+
+    foreach ($deployments as $id) {
+        $result = $deployment->updateStatus($username, $repository, $id, ['state' => $state]);
+
+        if (!isset($result['state']) || $state !== $result['state']) {
+            fwrite(STDOUT, sprintf('修改部署(id:%s)的状态(state:%s)失败' . PHP_EOL, $id, $state));
+            die(1);
+        }
+
+        fwrite(STDOUT, sprintf('修改部署(id:%s)的状态(state:%s)成功' . PHP_EOL, $id, $state));
+    }
+
+    die(0);
+}

@@ -1,0 +1,21 @@
+{
+  "name": "hughcube/github-event-trigger",
+  "description": "event trigger",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "hugh.li",
+      "email": "hugh.li@foxmail.com"
+    }
+  ],
+  "require": {
+    "php": ">=5.6",
+    "knplabs/github-api": "^1.0|^2.0",
+    "php-http/guzzle6-adapter": "^1.0|^2.0"
+  },
+  "bin": [
+    "githubEventTrigger"
+  ],
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}

@@ -1,0 +1,30 @@
+name: CompleteDeployment
+
+on: [deployment]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Check PHP Version
+        run: php -v
+
+      - name: Check Composer Version
+        run: composer -V
+
+      - name: Check PHP Extensions
+        run: php -m
+
+      - name: Validate composer.json and composer.lock
+        run: composer validate
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress --no-suggest
+
+      - name: Complete Single
+        run: php ./githubEventTrigger completeDeployment --auth_http_token=${{ secrets.GITHUB_TOKEN }} --repository=${{ github.repository }} --deployments=${{ github.event.deployment.id }}
+
+      - name: Complete All
+        run: php ./githubEventTrigger completeDeployment --auth_http_token=${{ secrets.GITHUB_TOKEN }} --repository=${{ github.repository }}
